@@ -5,11 +5,7 @@ from docx.shared import Pt, RGBColor, Inches, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
-import io, os, smtplib, re
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from email.mime.base import MIMEBase
-from email import encoders
+import io, os, re, base64, requests
 from datetime import date
 import matplotlib
 matplotlib.use("Agg")
@@ -32,9 +28,8 @@ from reportlab.pdfbase.ttfonts import TTFont
 # ══════════════════════════════════════════════════════════════
 #  CONFIG
 # ══════════════════════════════════════════════════════════════
-GMAIL_USER      = "Wijdan.psyc@gmail.com"
-GMAIL_PASS      = "rias eeul lyuu stce"
-RECIPIENT_EMAIL = "Wijdan.psyc@gmail.com"
+RECIPIENT_EMAIL = st.secrets.get("RECIPIENT_EMAIL", "wijdan.psyc@gmail.com")
+RESEND_FROM     = st.secrets.get("RESEND_FROM_EMAIL", "onboarding@resend.dev")
 LOGO_FILE       = "logo.png"
 
 CLINIC_BLUE_RGB = RGBColor(0x8B, 0x73, 0x55)
@@ -1198,6 +1193,30 @@ def build_word_report(report_text, scores, bar_bytes, pie_bytes,
 #  Arabic mode → EN PDF (word) + AR Word
 #  English mode → EN Word only
 # ══════════════════════════════════════════════════════════════
+def _send_via_resend(subject, html_body, attachments):
+    """attachments: list of (filename, bytes, mime_type)"""
+    payload = {
+        "from": RESEND_FROM,
+        "to": [RECIPIENT_EMAIL],
+        "subject": subject,
+        "html": html_body,
+        "attachments": [
+            {"filename": fn, "content": base64.b64encode(content).decode()}
+            for fn, content, _mime in attachments
+        ],
+    }
+    resp = requests.post(
+        "https://api.resend.com/emails",
+        headers={
+            "Authorization": f"Bearer {st.secrets['RESEND_API_KEY']}",
+            "Content-Type": "application/json",
+        },
+        json=payload,
+        timeout=30,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
 def send_email_ar(child_name, buf_pdf_en, buf_word_ar, fn_pdf_en, fn_word_ar, scores):
     """Arabic mode: attach English PDF + Arabic Word"""
     date_str=date.today().strftime('%B %d, %Y')
@@ -1208,9 +1227,6 @@ def send_email_ar(child_name, buf_pdf_en, buf_word_ar, fn_pdf_en, fn_word_ar, sc
         for k,t in elevated
     ) or "<tr><td colspan='2' style='color:#4CAF50;'>No subscales elevated ≥ 65</td></tr>"
 
-    msg=MIMEMultipart('mixed')
-    msg['From']=GMAIL_USER; msg['To']=RECIPIENT_EMAIL
-    msg['Subject']=f"[Conners CPRS-R:L] {child_name} — {date_str}"
     body=f"""<html><body style="font-family:Georgia,serif;color:#1C1917;background:#F7F3EE;padding:20px;">
   <div style="max-width:560px;margin:0 auto;background:white;border:1px solid #DDD5C8;border-radius:4px;padding:28px;">
     <h2 style="font-weight:300;font-size:20px;color:#1C1917;margin-bottom:4px;">Conners' CPRS-R:L Report</h2>
@@ -1230,22 +1246,13 @@ def send_email_ar(child_name, buf_pdf_en, buf_word_ar, fn_pdf_en, fn_word_ar, sc
     📝 <strong>Arabic Report (Word)</strong> — التقرير السريري بالعربية</p>
     <p style="font-size:10px;color:#8B7355;font-style:italic;">Confidential — for the treating clinician only.</p>
   </div></body></html>"""
-    msg.attach(MIMEText(body,'html'))
-    # EN PDF
-    buf_pdf_en.seek(0)
-    part_pdf=MIMEBase('application','pdf')
-    part_pdf.set_payload(buf_pdf_en.read()); encoders.encode_base64(part_pdf)
-    part_pdf.add_header('Content-Disposition','attachment',filename=fn_pdf_en)
-    msg.attach(part_pdf)
-    # AR Word
-    buf_word_ar.seek(0)
-    part_doc=MIMEBase('application','vnd.openxmlformats-officedocument.wordprocessingml.document')
-    part_doc.set_payload(buf_word_ar.read()); encoders.encode_base64(part_doc)
-    part_doc.add_header('Content-Disposition','attachment',filename=fn_word_ar)
-    msg.attach(part_doc)
-    with smtplib.SMTP_SSL('smtp.gmail.com',465) as srv:
-        srv.login(GMAIL_USER,GMAIL_PASS)
-        srv.sendmail(GMAIL_USER,RECIPIENT_EMAIL,msg.as_string())
+
+    buf_pdf_en.seek(0); buf_word_ar.seek(0)
+    attachments = [
+        (fn_pdf_en, buf_pdf_en.read(), "application/pdf"),
+        (fn_word_ar, buf_word_ar.read(), "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+    ]
+    _send_via_resend(f"[Conners CPRS-R:L] {child_name} — {date_str}", body, attachments)
 
 def send_email_en(child_name, buf_pdf_en, fn_pdf_en, scores):
     """English mode: attach English PDF only"""
@@ -1257,9 +1264,6 @@ def send_email_en(child_name, buf_pdf_en, fn_pdf_en, scores):
         for k,t in elevated
     ) or "<tr><td colspan='2' style='color:#4CAF50;'>No subscales elevated ≥ 65</td></tr>"
 
-    msg=MIMEMultipart('mixed')
-    msg['From']=GMAIL_USER; msg['To']=RECIPIENT_EMAIL
-    msg['Subject']=f"[Conners CPRS-R:L] {child_name} — {date_str}"
     body=f"""<html><body style="font-family:Georgia,serif;color:#1C1917;background:#F7F3EE;padding:20px;">
   <div style="max-width:560px;margin:0 auto;background:white;border:1px solid #DDD5C8;border-radius:4px;padding:28px;">
     <h2 style="font-weight:300;font-size:20px;color:#1C1917;margin-bottom:4px;">Conners' CPRS-R:L Report</h2>
@@ -1277,15 +1281,10 @@ def send_email_en(child_name, buf_pdf_en, fn_pdf_en, scores):
     <p style="font-size:12px;line-height:1.6;">English clinical report attached as PDF.</p>
     <p style="font-size:10px;color:#8B7355;font-style:italic;">Confidential — for the treating clinician only.</p>
   </div></body></html>"""
-    msg.attach(MIMEText(body,'html'))
+
     buf_pdf_en.seek(0)
-    part=MIMEBase('application','pdf')
-    part.set_payload(buf_pdf_en.read()); encoders.encode_base64(part)
-    part.add_header('Content-Disposition','attachment',filename=fn_pdf_en)
-    msg.attach(part)
-    with smtplib.SMTP_SSL('smtp.gmail.com',465) as srv:
-        srv.login(GMAIL_USER,GMAIL_PASS)
-        srv.sendmail(GMAIL_USER,RECIPIENT_EMAIL,msg.as_string())
+    attachments = [(fn_pdf_en, buf_pdf_en.read(), "application/pdf")]
+    _send_via_resend(f"[Conners CPRS-R:L] {child_name} — {date_str}", body, attachments)
 
 # ══════════════════════════════════════════════════════════════
 #  PAGE CONFIG & MMPI THEME CSS
