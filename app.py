@@ -1300,6 +1300,7 @@ st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500&family=Jost:wght@300;400;500&display=swap');
 :root{--cream:#F7F3EE;--deep:#1C1917;--warm:#8B7355;--accent:#C4956A;--border:#DDD5C8;--selected:#2D2926;}
+:root,[data-theme="light"],[data-theme="dark"]{--background-color:#F7F3EE!important;--secondary-background-color:#FFFFFF!important;--text-color:#1C1917!important;--primary-color:#8B7355!important;}
 #MainMenu{visibility:hidden!important;display:none!important;}
 header[data-testid="stHeader"]{visibility:hidden!important;display:none!important;}
 footer{visibility:hidden!important;display:none!important;}
@@ -1308,6 +1309,7 @@ a[href*="streamlit.io"]{display:none!important;}
 [class*="viewerBadge"],[class*="ProfileBadge"]{display:none!important;}
 html,body,[data-theme="dark"],[data-theme="light"]{color-scheme:light only!important;}
 [data-testid="stAppViewContainer"],.stApp{background-color:#F7F3EE!important;color:#1C1917!important;}
+[data-testid="stMarkdownContainer"] p,[data-testid="stMarkdownContainer"] li,[data-testid="stMarkdownContainer"] span,label,[data-testid="stWidgetLabel"] p,[data-testid="stCaptionContainer"]{color:#1C1917;}
 html,body,[class*="css"]{font-family:'Jost',sans-serif;background-color:var(--cream);color:var(--deep);}
 .stApp{background-color:var(--cream);}
 
