@@ -417,7 +417,7 @@ One paragraph for clinical records:
 """
     client = Groq(api_key=st.secrets["GROQ_API_KEY"])
     r = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
+        model="openai/gpt-oss-120b",
         messages=[{"role":"user","content":prompt}],
         max_tokens=3500
     )
@@ -502,7 +502,7 @@ def generate_report_ar(child_name, age, gender, rater, scores):
 """
     client = Groq(api_key=st.secrets["GROQ_API_KEY"])
     r = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
+        model="openai/gpt-oss-120b",
         messages=[{"role":"user","content":prompt}],
         max_tokens=3500
     )
