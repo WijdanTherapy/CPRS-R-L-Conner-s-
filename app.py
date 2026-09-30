@@ -25,6 +25,15 @@ from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer, Table,
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
+# Register a full-Unicode font (bundled with matplotlib) so symbols like
+# ≥ ≤ → ✓ — which Helvetica's built-in encoding can't render and would
+# otherwise show up as black "missing glyph" boxes — display correctly.
+_DEJAVU_DIR = os.path.join(matplotlib.get_data_path(), "fonts", "ttf")
+pdfmetrics.registerFont(TTFont("DejaVuSans", os.path.join(_DEJAVU_DIR, "DejaVuSans.ttf")))
+pdfmetrics.registerFont(TTFont("DejaVuSans-Bold", os.path.join(_DEJAVU_DIR, "DejaVuSans-Bold.ttf")))
+pdfmetrics.registerFontFamily("DejaVuSans", normal="DejaVuSans", bold="DejaVuSans-Bold",
+                               italic="DejaVuSans", boldItalic="DejaVuSans-Bold")
+
 # ══════════════════════════════════════════════════════════════
 #  CONFIG
 # ══════════════════════════════════════════════════════════════
@@ -376,14 +385,11 @@ RULES:
   Prioritize and expand ADHD subscale discussion. Identify whether the profile suggests primarily
   inattentive, primarily hyperactive/impulsive, or combined presentation.
 
-REPORT STRUCTURE:
+Do NOT repeat the child's name, age, gender, rater or date as a header block — that
+information is already presented separately above your narrative. Start your response
+directly with the CLINICAL SUMMARY section below.
 
-CONNERS' PARENT RATING SCALE — CLINICAL REPORT
-Child | {child_name}
-Age | {age}  |  Gender | {gender}
-Rater | {rater}
-Date | {date.today().strftime('%B %d, %Y')}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REPORT STRUCTURE:
 
 CLINICAL SUMMARY
 3–5 sentences covering the ADHD index, most elevated scales, and clinical significance.
@@ -462,14 +468,10 @@ def generate_report_ar(child_name, age, gender, rater, scores):
 - التركيز الأساسي للتقرير هو اضطراب ADHD وأعراضه (نقص الانتباه، فرط الحركة، الاندفاعية) والمقاييس ذات الصلة.
 - عند ذكر اسم الطفل في التقرير، استخدم التعريب الصوتي العربي للاسم الإنجليزي المُدخل.
 
-هيكل التقرير:
+لا تكرر اسم الطفل أو سنه أو نوعه أو المُقيِّم أو التاريخ كعنوان أو جدول في بداية التقرير —
+هذه المعلومات معروضة بالفعل بشكل منفصل قبل نصك. ابدأ إجابتك مباشرة بقسم "ملخص سريري" أدناه.
 
-تقرير مقياس كونرز للوالدين — التقرير السريري
-الطفل | {child_name}
-السن | {age}  |  النوع | {gender}
-المُقيِّم | {rater}
-التاريخ | {date.today().strftime('%Y/%m/%d')}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+هيكل التقرير:
 
 ملخص سريري
 ٣–٥ جمل: تلخيص المقياس العام مع التركيز على مؤشرات ADHD، المقاييس الأكثر ارتفاعاً، والدلالة السريرية.
@@ -539,21 +541,28 @@ def _t_band_label(t):
 def _make_pdf_styles():
     base = getSampleStyleSheet()
     styles = {}
-    styles['title'] = ParagraphStyle('title', fontName='Helvetica-Bold',
+    styles['title'] = ParagraphStyle('title', fontName='DejaVuSans-Bold',
         fontSize=16, textColor=PDF_DARK, spaceAfter=4, alignment=TA_CENTER)
-    styles['subtitle'] = ParagraphStyle('subtitle', fontName='Helvetica',
+    styles['subtitle'] = ParagraphStyle('subtitle', fontName='DejaVuSans',
         fontSize=9, textColor=PDF_WARM, spaceAfter=2, alignment=TA_CENTER)
-    styles['section'] = ParagraphStyle('section', fontName='Helvetica-Bold',
+    styles['section'] = ParagraphStyle('section', fontName='DejaVuSans-Bold',
         fontSize=11, textColor=PDF_WARM, spaceBefore=14, spaceAfter=4)
-    styles['body'] = ParagraphStyle('body', fontName='Helvetica',
+    styles['body'] = ParagraphStyle('body', fontName='DejaVuSans',
         fontSize=9.5, textColor=PDF_DARK, leading=14, spaceAfter=5)
-    styles['small'] = ParagraphStyle('small', fontName='Helvetica',
+    styles['small'] = ParagraphStyle('small', fontName='DejaVuSans',
         fontSize=8, textColor=PDF_WARM, leading=11)
-    styles['bold_body'] = ParagraphStyle('bold_body', fontName='Helvetica-Bold',
+    styles['bold_body'] = ParagraphStyle('bold_body', fontName='DejaVuSans-Bold',
         fontSize=9.5, textColor=PDF_DARK, leading=14, spaceAfter=3)
-    styles['summary_box'] = ParagraphStyle('summary_box', fontName='Helvetica',
+    styles['summary_box'] = ParagraphStyle('summary_box', fontName='DejaVuSans',
         fontSize=9.5, textColor=PDF_DARK, leading=14, spaceAfter=0,
         leftIndent=6, rightIndent=6)
+    # Used on colored table cells (rating pills, dark table headers) — a
+    # table's TEXTCOLOR command has no effect on a cell whose content is a
+    # Paragraph, so contrast has to be set on the Paragraph's own style.
+    styles['rating'] = ParagraphStyle('rating', fontName='DejaVuSans-Bold',
+        fontSize=8, textColor=colors.black, leading=11)
+    styles['header_white'] = ParagraphStyle('header_white', fontName='DejaVuSans-Bold',
+        fontSize=8.5, textColor=colors.white, leading=11)
     return styles
 
 def build_pdf_report_en(report_text, scores, bar_bytes, pie_bytes,
@@ -605,11 +614,11 @@ def build_pdf_report_en(report_text, scores, bar_bytes, pie_bytes,
 
     # ── Subscale score summary table ──
     score_header = [
-        Paragraph('<b>Scale</b>', S['small']),
-        Paragraph('<b>Raw</b>', S['small']),
-        Paragraph('<b>T-Score</b>', S['small']),
-        Paragraph('<b>Classification</b>', S['small']),
-        Paragraph('<b>Band</b>', S['small']),
+        Paragraph('Scale', S['header_white']),
+        Paragraph('Raw', S['header_white']),
+        Paragraph('T-Score', S['header_white']),
+        Paragraph('Classification', S['header_white']),
+        Paragraph('Band', S['header_white']),
     ]
     score_rows = [score_header]
     for key in "ABCDEFGHIJKLMN":
@@ -627,7 +636,7 @@ def build_pdf_report_en(report_text, scores, bar_bytes, pie_bytes,
     ts_cmds = [
         ('BACKGROUND', (0,0), (-1,0), PDF_HEADER),
         ('TEXTCOLOR', (0,0), (-1,0), colors.white),
-        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('FONTNAME', (0,0), (-1,0), 'DejaVuSans-Bold'),
         ('FONTSIZE', (0,0), (-1,-1), 8.5),
         ('BOX', (0,0), (-1,-1), 0.5, PDF_BORDER),
         ('INNERGRID', (0,0), (-1,-1), 0.3, PDF_BORDER),
@@ -641,7 +650,7 @@ def build_pdf_report_en(report_text, scores, bar_bytes, pie_bytes,
         t = scores[key]['t']
         ts_cmds.append(('BACKGROUND', (4, row_i), (4, row_i), _t_band_color(t)))
         ts_cmds.append(('TEXTCOLOR',  (4, row_i), (4, row_i), colors.black))
-        ts_cmds.append(('FONTNAME',   (4, row_i), (4, row_i), 'Helvetica-Bold'))
+        ts_cmds.append(('FONTNAME',   (4, row_i), (4, row_i), 'DejaVuSans-Bold'))
     score_tbl.setStyle(TableStyle(ts_cmds))
     story.append(KeepTogether([
         Paragraph("SUBSCALE SCORE SUMMARY", S['section']),
@@ -651,10 +660,10 @@ def build_pdf_report_en(report_text, scores, bar_bytes, pie_bytes,
 
     # ── Colour legend ──
     legend_data = [
-        [Paragraph('<b>Colour</b>', S['small']),
-         Paragraph('<b>T-Score Range</b>', S['small']),
-         Paragraph('<b>Classification</b>', S['small']),
-         Paragraph('<b>Clinical Meaning</b>', S['small'])],
+        [Paragraph('Colour', S['header_white']),
+         Paragraph('T-Score Range', S['header_white']),
+         Paragraph('Classification', S['header_white']),
+         Paragraph('Clinical Meaning', S['header_white'])],
         [Paragraph('', S['small']),
          Paragraph('T ≥ 70', S['body']),
          Paragraph('<b>Markedly Atypical</b>', S['body']),
@@ -676,7 +685,7 @@ def build_pdf_report_en(report_text, scores, bar_bytes, pie_bytes,
     legend_cmds = [
         ('BACKGROUND', (0,0), (-1,0), PDF_HEADER),
         ('TEXTCOLOR',  (0,0), (-1,0), colors.white),
-        ('FONTNAME',   (0,0), (-1,0), 'Helvetica-Bold'),
+        ('FONTNAME',   (0,0), (-1,0), 'DejaVuSans-Bold'),
         ('FONTSIZE',   (0,0), (-1,-1), 8.5),
         ('BOX',        (0,0), (-1,-1), 0.5, PDF_BORDER),
         ('INNERGRID',  (0,0), (-1,-1), 0.3, PDF_BORDER),
@@ -691,7 +700,7 @@ def build_pdf_report_en(report_text, scores, bar_bytes, pie_bytes,
         ('BACKGROUND', (0,4), (0,4), PDF_GREEN),
         # text on coloured swatches → black bold
         ('TEXTCOLOR',  (0,1), (0,-1), colors.black),
-        ('FONTNAME',   (0,1), (0,-1), 'Helvetica-Bold'),
+        ('FONTNAME',   (0,1), (0,-1), 'DejaVuSans-Bold'),
         # alternate row background for readability cols
         ('ROWBACKGROUNDS', (1,1), (-1,-1), [colors.white, PDF_CREAM, colors.white, PDF_CREAM]),
     ]
@@ -716,9 +725,9 @@ def build_pdf_report_en(report_text, scores, bar_bytes, pie_bytes,
 
     adhd_keys = [("H","ADHD Index"),("L","DSM-IV Inattentive"),
                  ("M","DSM-IV Hyperactive-Impulsive"),("N","DSM-IV Total")]
-    adhd_rows = [[Paragraph('<b>Scale</b>',S['small']),
-                  Paragraph('<b>T</b>',S['small']),
-                  Paragraph('<b>Classification</b>',S['small'])]]
+    adhd_rows = [[Paragraph('Scale',S['header_white']),
+                  Paragraph('T',S['header_white']),
+                  Paragraph('Classification',S['header_white'])]]
     for k, lbl in adhd_keys:
         t = scores[k]['t']
         adhd_rows.append([Paragraph(lbl, S['body']),
@@ -728,7 +737,7 @@ def build_pdf_report_en(report_text, scores, bar_bytes, pie_bytes,
     adhd_ts = [
         ('BACKGROUND', (0,0), (-1,0), PDF_HEADER),
         ('TEXTCOLOR', (0,0), (-1,0), colors.white),
-        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('FONTNAME', (0,0), (-1,0), 'DejaVuSans-Bold'),
         ('FONTSIZE', (0,0), (-1,-1), 8.5),
         ('BOX', (0,0), (-1,-1), 0.5, PDF_BORDER),
         ('INNERGRID', (0,0), (-1,-1), 0.3, PDF_BORDER),
@@ -742,7 +751,7 @@ def build_pdf_report_en(report_text, scores, bar_bytes, pie_bytes,
         t = scores[k]['t']
         adhd_ts.append(('BACKGROUND', (1, row_i), (1, row_i), _t_band_color(t)))
         adhd_ts.append(('TEXTCOLOR',  (1, row_i), (1, row_i), colors.black))
-        adhd_ts.append(('FONTNAME',   (1, row_i), (1, row_i), 'Helvetica-Bold'))
+        adhd_ts.append(('FONTNAME',   (1, row_i), (1, row_i), 'DejaVuSans-Bold'))
     adhd_tbl.setStyle(TableStyle(adhd_ts))
 
     side_tbl = Table([[pie_img, adhd_tbl]], colWidths=[8*cm, W-8*cm])
@@ -774,8 +783,8 @@ def build_pdf_report_en(report_text, scores, bar_bytes, pie_bytes,
         if '|' in ls:
             parts = [p.strip() for p in ls.split('|') if p.strip()]
             if len(parts) >= 2:
-                skip = [("field","value"),("subscale","raw")]
-                if (parts[0].lower(), parts[1].lower()) not in skip:
+                skip_labels = {"field","subscale","child","age","gender","rater","date"}
+                if parts[0].lower() not in skip_labels:
                     row_data = [[Paragraph(p, S['body']) for p in parts]]
                     col_w = W / len(parts)
                     mini_tbl = Table(row_data, colWidths=[col_w]*len(parts))
@@ -807,15 +816,15 @@ def build_pdf_report_en(report_text, scores, bar_bytes, pie_bytes,
     rating_colors = {0:PDF_GREEN, 1:PDF_YELLOW, 2:PDF_ORANGE, 3:PDF_RED}
 
     item_header = [
-        Paragraph('<b>#</b>', S['small']),
-        Paragraph('<b>Item</b>', S['small']),
-        Paragraph('<b>Rating</b>', S['small']),
+        Paragraph('#', S['header_white']),
+        Paragraph('Item', S['header_white']),
+        Paragraph('Rating', S['header_white']),
     ]
     item_rows = [item_header]
     item_ts_cmds = [
         ('BACKGROUND', (0,0), (-1,0), PDF_HEADER),
         ('TEXTCOLOR', (0,0), (-1,0), colors.white),
-        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('FONTNAME', (0,0), (-1,0), 'DejaVuSans-Bold'),
         ('FONTSIZE', (0,0), (-1,-1), 8),
         ('BOX', (0,0), (-1,-1), 0.5, PDF_BORDER),
         ('INNERGRID', (0,0), (-1,-1), 0.3, PDF_BORDER),
@@ -830,12 +839,10 @@ def build_pdf_report_en(report_text, scores, bar_bytes, pie_bytes,
         bg = colors.white if i % 2 == 0 else PDF_CREAM
         item_ts_cmds.append(('BACKGROUND', (0, item_num), (1, item_num), bg))
         item_ts_cmds.append(('BACKGROUND', (2, item_num), (2, item_num), rating_colors[val]))
-        item_ts_cmds.append(('TEXTCOLOR',  (2, item_num), (2, item_num), colors.black))
-        item_ts_cmds.append(('FONTNAME',   (2, item_num), (2, item_num), 'Helvetica-Bold'))
         item_rows.append([
             Paragraph(str(item_num), S['small']),
             Paragraph(item_text, S['small']),
-            Paragraph(rating_labels[val], S['small']),
+            Paragraph(rating_labels[val], S['rating']),
         ])
     item_tbl = Table(item_rows, colWidths=[1*cm, 12.5*cm, 4*cm], repeatRows=1)
     item_tbl.setStyle(TableStyle(item_ts_cmds))
@@ -1099,8 +1106,9 @@ def build_word_report(report_text, scores, bar_bytes, pie_bytes,
             parts=[p.strip() for p in ls.split('|') if p.strip()]
             if not parts: continue
             if all(set(p)<=set('-: ') for p in parts): continue
-            skip=[("field","value"),("subscale","raw"),("المقياس","الخام"),("الحقل","البيانات")]
-            if len(parts)>=2 and (parts[0].strip('* ').lower(),parts[1].strip('* ').lower()) in skip: continue
+            skip_labels={"field","subscale","child","age","gender","rater","date",
+                         "المقياس","الحقل","الطفل","السن","النوع","المُقيِّم","التاريخ"}
+            if parts[0].strip('* ').lower() in skip_labels: continue
             if not in_table or current_table is None:
                 in_table=True; current_table=make_table()
                 hdr=("Field","Details") if lang=="en" else ("الحقل","التفاصيل")
@@ -1342,6 +1350,9 @@ div[data-testid="stRadio"]>div>label:hover{border-color:var(--accent)!important;
 /* Submit button */
 .stButton>button{background:var(--selected)!important;color:var(--cream)!important;border:none!important;padding:.75rem 2.5rem!important;font-family:'Jost',sans-serif!important;font-size:.82rem!important;font-weight:500!important;letter-spacing:.08em!important;border-radius:2px!important;transition:background .2s!important;}
 .stButton>button:hover{background:var(--warm)!important;}
+/* Dark-background buttons render their label inside a nested markdown <p>,
+   which the generic dark-text rule above would otherwise make invisible. */
+.stButton>button p,.stButton>button span,.stButton>button div{color:var(--cream)!important;}
 
 /* Thank-you screen */
 .thank-you{text-align:center;padding:5rem 2rem;}
@@ -1407,14 +1418,15 @@ if st.session_state.report_done:
         c1,c2,c3=st.columns([1,2,1])
         with c2: st.image(LOGO_FILE, use_container_width=True)
 
+    email_ok = st.session_state.get("email_sent", True)
+
     if lang=="en":
+        msg = ("Thank you. Your assessment has been submitted.<br>Your clinic will contact you."
+               if email_ok else
+               "Thank you. Your assessment has been recorded.<br>Please contact your clinic directly to confirm they received it.")
         st.markdown(f"""<div class="thank-you">
-            <h2>Report Submitted Successfully</h2>
-            <p style="font-size:1.05rem;margin-top:.5rem;">{child_name}</p>
-            <p style="font-size:.9rem;color:#8B7355;margin-top:.8rem;">
-                The report has been sent to the clinic email.<br>
-                You may now close this window.
-            </p>
+            <h2>Assessment Submitted</h2>
+            <p style="font-size:.95rem;color:#8B7355;margin-top:.8rem;">{msg}</p>
         </div>""", unsafe_allow_html=True)
         _,btn_col,_=st.columns([2,2,2])
         with btn_col:
@@ -1424,13 +1436,12 @@ if st.session_state.report_done:
                 st.session_state.responses={}; st.session_state.submitted=False
                 st.session_state.report_done=False; st.rerun()
     else:
+        msg = ("شكراً لك. تم إرسال التقييم بنجاح.<br>سيتواصل معك عيادتك قريباً."
+               if email_ok else
+               "شكراً لك. تم تسجيل التقييم.<br>يرجى التواصل مع عيادتك مباشرة للتأكد من استلامه.")
         st.markdown(f"""<div class="thank-you" style="direction:rtl;">
-            <h2>تم إرسال التقرير بنجاح</h2>
-            <p style="font-size:1.05rem;margin-top:.5rem;">{child_name}</p>
-            <p style="font-size:.9rem;color:#8B7355;margin-top:.8rem;">
-                تم إرسال التقرير إلى البريد الإلكتروني للعيادة.<br>
-                يمكنك إغلاق هذه النافذة الآن.
-            </p>
+            <h2>تم إرسال التقييم</h2>
+            <p style="font-size:.95rem;color:#8B7355;margin-top:.8rem;">{msg}</p>
         </div>""", unsafe_allow_html=True)
         _,btn_col,_=st.columns([2,2,2])
         with btn_col:
@@ -1696,8 +1707,12 @@ if submit and answered_count==80:
                 send_email_ar(child_name_v,buf_pdf_en_,buf_word_ar_,fn_pdf_en_,fn_word_ar_,scores)
             else:
                 send_email_en(child_name_v,buf_pdf_en_,fn_pdf_en_,scores)
-        except Exception:
-            pass  # email failure is silent
+            st.session_state["email_sent"]=True
+        except Exception as e:
+            # Never show internal details to the client — just log server-side
+            # (visible in Streamlit Cloud → Manage app → Logs) and flag it.
+            print(f"[Conners] report email failed for '{child_name_v}': {e!r}")
+            st.session_state["email_sent"]=False
 
         st.session_state["scores"]      =scores
         st.session_state["report_en"]   =report_en
