@@ -282,6 +282,9 @@ def raw_to_t(raw, key):
     if sd == 0: return 50
     return max(20, min(90, round(50 + 10 * (raw - mean) / sd)))
 
+def _has_arabic(text):
+    return any('؀' <= c <= 'ۿ' for c in str(text))
+
 def compute_scores(responses):
     results = {}
     for key, info in SUBSCALES.items():
@@ -1340,9 +1343,6 @@ div[data-testid="stRadio"]>div{gap:.4rem!important;flex-direction:row!important;
 div[data-testid="stRadio"]>div>label{background:var(--cream)!important;border:1px solid var(--border)!important;border-radius:20px!important;padding:.4rem 1.2rem!important;cursor:pointer!important;font-size:.85rem!important;color:var(--deep)!important;font-family:'Jost',sans-serif!important;transition:all .15s ease!important;white-space:nowrap!important;}
 div[data-testid="stRadio"]>div>label:hover{border-color:var(--accent)!important;background:#FDF9F4!important;}
 
-/* RTL radio for Arabic */
-.rtl-radio div[data-testid="stRadio"]>div{flex-direction:row-reverse!important;justify-content:flex-start!important;}
-
 /* Progress bar */
 .progress-wrap{background:var(--border);border-radius:2px;height:3px;margin:1rem 0 .5rem;}
 .progress-fill{height:3px;border-radius:2px;background:linear-gradient(90deg,var(--warm),var(--accent));}
@@ -1457,6 +1457,18 @@ if st.session_state.report_done:
 #  FORM
 # ══════════════════════════════════════════════════════════════
 lang = st.session_state.lang
+
+if lang == "ar":
+    st.markdown("""
+    <style>
+    .main .block-container{direction:rtl;}
+    div[data-testid="stTextInput"] input{direction:rtl;text-align:right;}
+    div[data-testid="stSelectbox"] div[data-baseweb="select"]{direction:rtl;}
+    div[data-testid="stSelectbox"] div[data-baseweb="select"] *{text-align:right;}
+    div[data-testid="stRadio"]>div{direction:rtl!important;justify-content:flex-end!important;}
+    div[data-testid="stWidgetLabel"] p{direction:rtl;text-align:right;}
+    </style>
+    """, unsafe_allow_html=True)
 
 # Logo
 if os.path.exists(LOGO_FILE):
@@ -1574,9 +1586,16 @@ else:
         margin-bottom:.8rem;padding-bottom:.4rem;border-bottom:1px solid #DDD5C8;
         direction:rtl;text-align:right;">
         بيانات الطفل</div>""", unsafe_allow_html=True)
+    st.markdown("""<div style="background:#FFF8F0;border-left:3px solid #E07B39;
+        padding:.8rem 1.2rem;border-radius:0 4px 4px 0;font-size:.85rem;color:#7A3D1A;
+        margin-bottom:1rem;direction:rtl;text-align:right;border-left:none;border-right:3px solid #E07B39;">
+        ⚠ يُرجى كتابة <strong>اسم الطفل</strong> و<strong>اسم المُقيِّم</strong> بالأحرف
+        الإنجليزية فقط (مثال: Ahmed Hassan). كتابتها بالعربية تمنع ظهورها بشكل صحيح
+        في التقرير المُرسل للعيادة.
+    </div>""", unsafe_allow_html=True)
     c1,c2,c3=st.columns(3)
     with c1:
-        child_name=st.text_input("اسم الطفل (بالإنجليزية)",placeholder="e.g. Ahmed Hassan",key="child_name_inp")
+        child_name=st.text_input("اسم الطفل (بالأحرف الإنجليزية إلزامي)",placeholder="e.g. Ahmed Hassan",key="child_name_inp")
         child_age=st.selectbox("السن (بالسنوات)",options=["—"]+[str(i) for i in range(3,18)],key="child_age_inp")
         child_age = "" if child_age=="—" else child_age
     with c2:
@@ -1588,7 +1607,7 @@ else:
         child_grade=st.selectbox("الصف الدراسي",options=grade_opts_ar,key="child_grade_inp")
         child_grade = "" if child_grade=="—" else child_grade
     with c3:
-        rater=st.text_input("اسم المُقيِّم (ولي الأمر)",placeholder="الاسم",key="rater_inp")
+        rater=st.text_input("اسم المُقيِّم (بالأحرف الإنجليزية إلزامي)",placeholder="e.g. Sara Ahmed",key="rater_inp")
         relationship=st.selectbox(
             "صلة القرابة بالطفل",
             options=["—","الأم","الأب","الجدة","الجد","وصي","أخرى"],
@@ -1659,10 +1678,12 @@ st.markdown(f"""
 if not all_answered and answered_count>0:
     warn="⚠ Please answer all 80 items before submitting." if lang=="en" \
          else "⚠ يرجى الإجابة على جميع البنود الـ 80 قبل الإرسال."
-    st.markdown(f"""<div style="background:#FFF8F0;border-left:3px solid #E07B39;
-        padding:1rem 1.2rem;border-radius:0 4px 4px 0;
-        font-size:.88rem;color:#7A3D1A;margin:1rem 0;">{warn}</div>""",
-        unsafe_allow_html=True)
+    warn_style=("background:#FFF8F0;border-right:3px solid #E07B39;padding:1rem 1.2rem;"
+                "border-radius:4px 0 0 4px;font-size:.88rem;color:#7A3D1A;margin:1rem 0;"
+                "direction:rtl;text-align:right;") if lang=="ar" else \
+               ("background:#FFF8F0;border-left:3px solid #E07B39;padding:1rem 1.2rem;"
+                "border-radius:0 4px 4px 0;font-size:.88rem;color:#7A3D1A;margin:1rem 0;")
+    st.markdown(f"""<div style="{warn_style}">{warn}</div>""", unsafe_allow_html=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
 btn_label="✦ Generate Report" if lang=="en" else "✦ توليد التقرير"
@@ -1681,11 +1702,19 @@ if submit and answered_count==80:
         gender_v_en = "Male" if gender_v == "ذكر" else "Female"
     responses_v =dict(st.session_state.responses)
 
+    # The English PDF's font has no Arabic glyphs, and Arabic text fed into
+    # the English-language prompt would echo unpredictably through the LLM's
+    # narrative too — so anything Arabic here falls back to a safe generic
+    # label for the English-facing report only. The Arabic Word report and
+    # emailed HTML (both below) still use the real name/rater as typed.
+    child_name_en_v = "Child" if _has_arabic(child_name_v) else child_name_v
+    rater_en_v      = "Parent/Guardian" if _has_arabic(rater_v) else rater_v
+
     spinner_txt=("⏳ Scoring and generating report..." if lang=="en"
                  else "⏳ جاري الحساب وإنشاء التقارير...")
     with st.spinner(spinner_txt):
         scores   =compute_scores(st.session_state.responses)
-        report_en=generate_report_en(child_name_v,child_age_v,gender_v_en,rater_v,scores)
+        report_en=generate_report_en(child_name_en_v,child_age_v,gender_v_en,rater_en_v,scores)
 
         # Arabic mode → also generate Arabic report
         report_ar=""
@@ -1697,8 +1726,8 @@ if submit and answered_count==80:
             bar_b=make_bar_chart(scores,lang); pie_b=make_pie_chart(responses_v)
             # English report → always PDF
             buf_pdf_en_=build_pdf_report_en(report_en,scores,bar_b,pie_b,
-                                             child_name_v,child_age_v,gender_v_en,rater_v,responses_v)
-            fn_pdf_en_=f"{child_name_v.replace(' ','_')}_Conners_EN.pdf"
+                                             child_name_en_v,child_age_v,gender_v_en,rater_en_v,responses_v)
+            fn_pdf_en_=f"{child_name_en_v.replace(' ','_')}_Conners_EN.pdf"
             if lang=="ar":
                 # Arabic report → Word
                 buf_word_ar_=build_word_report(report_ar,scores,bar_b,pie_b,
